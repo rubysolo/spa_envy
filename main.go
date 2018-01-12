@@ -70,13 +70,38 @@ func (h *StaticHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	io.Copy(w, &wrapped.buffer)
 }
 
+// generate a redirect handler
+func makeRedirect(destination string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, destination, http.StatusFound)
+	}
+}
+
 func main() {
+	// handle /env.js
 	envJSON, err := json.MarshalIndent(envMap(), "", "  ")
 	if err != nil {
 		panic(err)
 	}
 	http.HandleFunc("/env.js", makeEnvHandler(envJSON))
 
+	// add redirects
+	redirects := os.Getenv("REDIRECTS")
+	pairs := strings.Split(redirects, ";")
+	if len(pairs) > 0 {
+		for _, pair := range pairs {
+			parts := strings.SplitN(pair, ":", 2)
+			if len(parts) == 2 {
+				src := parts[0]
+				dst := parts[1]
+				if dst != "" {
+					http.Handle("/" + src, makeRedirect(dst))
+				}
+			}
+		}
+	}
+
+	// static files
 	fs := &StaticHandler{fileServer: http.FileServer(http.Dir("static"))}
 	http.Handle("/", fs)
 
